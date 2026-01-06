@@ -1,0 +1,54 @@
+<?php
+/**
+ * Plugin Name: HM Menu Controller
+ * Plugin URI:  https://github.com/wisdomrainmusic/hm-menu-controller
+ * Description: Admin sidebar menu visibility controller (UI-only; no access restriction).
+ * Version:     0.1.0
+ * Author:      Wisdom Rain Music
+ * Author URI:  https://wisdomrainmusic.com
+ * License:     GPLv2 or later
+ * License URI: https://www.gnu.org/licenses/gpl-2.0.html
+ * Text Domain: hm-menu-controller
+ * Domain Path: /languages
+ */
+
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
+
+final class HM_Menu_Controller {
+
+    const VERSION = '0.1.0';
+
+    /** @var HM_Menu_Controller|null */
+    private static $instance = null;
+
+    public static function instance() : HM_Menu_Controller {
+        if ( null === self::$instance ) {
+            self::$instance = new self();
+        }
+
+        return self::$instance;
+    }
+
+    private function __construct() {
+        add_action( 'plugins_loaded', array( $this, 'init' ) );
+    }
+
+    public function init() : void {
+        // Bootstrap only. No behavior in Commit 1.
+        load_plugin_textdomain(
+            'hm-menu-controller',
+            false,
+            dirname( plugin_basename( __FILE__ ) ) . '/languages'
+        );
+    }
+
+    private function __clone() {}
+
+    public function __wakeup() {
+        // Prevent unserialize.
+    }
+}
+
+HM_Menu_Controller::instance();
