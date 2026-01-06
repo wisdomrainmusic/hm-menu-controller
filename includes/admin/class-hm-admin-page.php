@@ -227,17 +227,25 @@ echo '<p>' . esc_html__( 'Add at least one restricted user to configure menu vis
 return;
 }
 
-$url = admin_url( 'admin.php?page=' . self::MENU_SLUG );
+$base_url = admin_url( 'admin.php?page=' . self::MENU_SLUG );
+
+// Safe JS base for onchange redirect
+$js_base = $base_url . '&hm_mc_target_user_id=';
 
 echo '<div style="margin: 10px 0 16px;">';
 echo '<label for="hm_mc_target_user_id" style="margin-right:10px;"><strong>' . esc_html__( 'Target user:', 'hm-menu-controller' ) . '</strong></label>';
-echo '<select id="hm_mc_target_user_id" onchange="if(this.value){window.location=\'' . esc_url( $url ) . '&hm_mc_target_user_id='+this.value;}">';
+
+printf(
+'<select id="hm_mc_target_user_id" onchange="if(this.value){window.location=%s + encodeURIComponent(this.value);}">',
+esc_attr( wp_json_encode( $js_base ) )
+);
 
 foreach ( $restricted_ids as $uid ) {
 $user = get_user_by( 'id', (int) $uid );
 if ( ! $user ) {
 continue;
 }
+
 printf(
 '<option value="%1$d"%2$s>%3$s (%4$s)</option>',
 (int) $user->ID,
