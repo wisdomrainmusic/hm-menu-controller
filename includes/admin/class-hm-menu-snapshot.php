@@ -52,6 +52,8 @@ final class HM_MC_Menu_Snapshot {
                 'children'    => array(),
             );
 
+            $seen = array();
+
             // Parent as a child row (useful for UI: checkbox on parent itself)
             $node['children'][] = array(
                 'slug'        => $parent_slug,
@@ -59,6 +61,8 @@ final class HM_MC_Menu_Snapshot {
                 'parent_slug' => $parent_slug,
                 'is_parent'   => true,
             );
+
+            $seen[ $parent_slug ] = true;
 
             // Submenus
             if ( isset( $submenu[ $parent_slug ] ) && is_array( $submenu[ $parent_slug ] ) ) {
@@ -69,6 +73,11 @@ final class HM_MC_Menu_Snapshot {
 
                     $child_slug  = (string) $sub_item[2];
                     $child_label = self::normalize_label( $sub_item[0] ?? '' );
+
+                    if ( isset( $seen[ $child_slug ] ) ) {
+                        continue;
+                    }
+                    $seen[ $child_slug ] = true;
 
                     $node['children'][] = array(
                         'slug'        => $child_slug,
