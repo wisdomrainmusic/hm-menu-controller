@@ -20,11 +20,18 @@ final class HM_MC_Admin {
 		require_once HM_MC_PATH . 'includes/admin/class-hm-settings.php';
 		require_once HM_MC_PATH . 'includes/admin/class-hm-admin-page.php';
 		require_once HM_MC_PATH . 'includes/admin/class-hm-menu-snapshot.php';
+		require_once HM_MC_PATH . 'includes/admin/class-hm-menu-visibility.php';
 
 		add_action( 'admin_menu', array( 'HM_MC_Admin_Page', 'register_menu' ) );
 
 		// Form post handler (admin-post.php endpoint)
 		add_action( 'admin_post_hm_mc_admin_page', array( 'HM_MC_Admin_Page', 'handle_post' ) );
+
+		add_action(
+			'admin_menu',
+			array( 'HM_MC_Menu_Visibility', 'apply' ),
+			999
+		);
 	}
 
 	public static function current_user_is_restricted() : bool {
