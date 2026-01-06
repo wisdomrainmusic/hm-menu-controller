@@ -19,6 +19,7 @@ final class HM_MC_Admin {
 	public function init() : void {
 		require_once HM_MC_PATH . 'includes/admin/class-hm-settings.php';
 		require_once HM_MC_PATH . 'includes/admin/class-hm-admin-page.php';
+		require_once HM_MC_PATH . 'includes/admin/class-hm-menu-snapshot.php';
 
 		add_action( 'admin_menu', array( 'HM_MC_Admin_Page', 'register_menu' ) );
 
