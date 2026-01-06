@@ -66,20 +66,17 @@ if ( $target_user_id <= 0 ) {
 self::redirect_with_notice( 'invalid_request' );
 }
 
-// posted visible slugs -> we store hidden slugs
-$visible = isset( $_POST['hm_mc_visible_slugs'] ) ? (array) wp_unslash( $_POST['hm_mc_visible_slugs'] ) : array();
-$visible = array_map( 'sanitize_text_field', $visible );
-
-$all_slugs = HM_MC_Menu_Snapshot::get_all_slugs_flat();
-$hidden    = array_values( array_diff( $all_slugs, $visible ) );
+$hidden = isset( $_POST['hm_mc_hidden_slugs'] ) ? (array) wp_unslash( $_POST['hm_mc_hidden_slugs'] ) : array();
+$hidden = array_map( 'sanitize_text_field', $hidden );
 
 HM_MC_Settings::save_hidden_menu_slugs( (int) $target_user_id, $hidden );
 
 $url = add_query_arg(
 array(
-'page'                => self::MENU_SLUG,
-'hm_mc_notice'        => rawurlencode( 'menu_saved' ),
-'hm_mc_target_user_id'=> (int) $target_user_id,
+'page'                 => self::MENU_SLUG,
+'hm_mc_notice'         => rawurlencode( 'menu_saved' ),
+'hm_mc_target_user_id' => (int) $target_user_id,
+'hm_mc_tab'            => isset( $_GET['hm_mc_tab'] ) ? sanitize_text_field( wp_unslash( $_GET['hm_mc_tab'] ) ) : '',
 ),
 admin_url( 'admin.php' )
 );
@@ -200,7 +197,7 @@ $roles = ! empty( $user->roles ) ? implode( ', ', array_map( 'sanitize_text_fiel
 <hr />
 
 <h2><?php echo esc_html__( 'Menu Visibility (Per User)', 'hm-menu-controller' ); ?></h2>
-<p><?php echo esc_html__( 'Select a restricted user, then uncheck items you want to hide from their admin sidebar. This does not block direct URL access.', 'hm-menu-controller' ); ?></p>
+<p><?php echo esc_html__( 'Select a restricted user, then check items you want to hide from their admin sidebar. This does not block direct URL access.', 'hm-menu-controller' ); ?></p>
 
 <?php self::render_target_user_picker( $restricted_ids, $target_user_id ); ?>
 
@@ -320,10 +317,10 @@ if ( '' === $child_slug ) {
 continue;
 }
 
-$is_visible = ! in_array( $child_slug, $hidden_slugs, true );
+$is_hidden = in_array( $child_slug, $hidden_slugs, true );
 
 echo '<tr>';
-echo '<td><input type="checkbox" name="hm_mc_visible_slugs[]" value="' . esc_attr( $child_slug ) . '" ' . checked( $is_visible, true, false ) . ' /></td>';
+echo '<td><input type="checkbox" name="hm_mc_hidden_slugs[]" value="' . esc_attr( $child_slug ) . '" ' . checked( $is_hidden, true, false ) . ' /></td>';
 echo '<td>' . esc_html( $child_label ) . '</td>';
 echo '<td><code>' . esc_html( $child_slug ) . '</code></td>';
 echo '</tr>';
