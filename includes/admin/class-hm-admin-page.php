@@ -66,10 +66,31 @@ if ( $target_user_id <= 0 ) {
 self::redirect_with_notice( 'invalid_request' );
 }
 
-$hidden = isset( $_POST['hm_mc_hidden_slugs'] ) ? (array) wp_unslash( $_POST['hm_mc_hidden_slugs'] ) : array();
-$hidden = array_map( 'sanitize_text_field', $hidden );
+$tab_slugs = isset( $_POST['hm_mc_tab_slugs'] ) ? (array) wp_unslash( $_POST['hm_mc_tab_slugs'] ) : array();
+$tab_slugs = array_map( 'sanitize_text_field', $tab_slugs );
+$tab_slugs = array_values( array_unique( array_filter( $tab_slugs ) ) );
 
-HM_MC_Settings::save_hidden_menu_slugs( (int) $target_user_id, $hidden );
+$posted_hidden = isset( $_POST['hm_mc_hidden_slugs'] ) ? (array) wp_unslash( $_POST['hm_mc_hidden_slugs'] ) : array();
+$posted_hidden = array_map( 'sanitize_text_field', $posted_hidden );
+$posted_hidden = array_values( array_unique( array_filter( $posted_hidden ) ) );
+
+// Merge strategy: update only current tab slugs, keep other tabs untouched.
+$existing_hidden = HM_MC_Settings::get_hidden_menu_slugs( (int) $target_user_id );
+
+if ( ! empty( $tab_slugs ) ) {
+$existing_hidden = array_values(
+array_filter(
+$existing_hidden,
+static function ( $slug ) use ( $tab_slugs ) {
+return ! in_array( (string) $slug, $tab_slugs, true );
+}
+)
+);
+}
+
+$new_hidden = array_values( array_unique( array_merge( $existing_hidden, $posted_hidden ) ) );
+
+HM_MC_Settings::save_hidden_menu_slugs( (int) $target_user_id, $new_hidden );
 
 $url = add_query_arg(
 array(
@@ -320,6 +341,8 @@ continue;
 $is_hidden = in_array( $child_slug, $hidden_slugs, true );
 
 echo '<tr>';
+// IMPORTANT: mark this slug as part of current tab scope
+echo '<input type="hidden" name="hm_mc_tab_slugs[]" value="' . esc_attr( $child_slug ) . '" />';
 echo '<td><input type="checkbox" name="hm_mc_hidden_slugs[]" value="' . esc_attr( $child_slug ) . '" ' . checked( $is_hidden, true, false ) . ' /></td>';
 echo '<td>' . esc_html( $child_label ) . '</td>';
 echo '<td><code>' . esc_html( $child_slug ) . '</code></td>';
