@@ -114,4 +114,26 @@ final class HM_MC_Menu_Snapshot {
         // Fallback if label empty for some reason.
         return $parent_slug;
     }
+
+    public static function get_all_slugs_flat() : array {
+        $tree  = self::get_tree();
+        $slugs = array();
+
+        foreach ( $tree as $node ) {
+            if ( empty( $node['children'] ) || ! is_array( $node['children'] ) ) {
+                continue;
+            }
+            foreach ( $node['children'] as $child ) {
+                $slug = isset( $child['slug'] ) ? (string) $child['slug'] : '';
+                $slug = trim( $slug );
+                if ( '' !== $slug ) {
+                    $slugs[] = $slug;
+                }
+            }
+        }
+
+        $slugs = array_values( array_unique( $slugs ) );
+        sort( $slugs );
+        return $slugs;
+    }
 }

@@ -71,4 +71,47 @@ final class HM_MC_Settings {
 
         return (int) $user->ID;
     }
+
+    public static function get_hidden_menu_slugs( int $user_id ) : array {
+        if ( $user_id <= 0 ) {
+            return array();
+        }
+
+        $slugs = get_user_meta( $user_id, 'hm_mc_hidden_menu_slugs', true );
+
+        if ( ! is_array( $slugs ) ) {
+            return array();
+        }
+
+        $slugs = array_map(
+            static function ( $s ) {
+                $s = (string) $s;
+                $s = trim( $s );
+                return $s;
+            },
+            $slugs
+        );
+
+        $slugs = array_filter( $slugs );
+        return array_values( array_unique( $slugs ) );
+    }
+
+    public static function save_hidden_menu_slugs( int $user_id, array $slugs ) : void {
+        if ( $user_id <= 0 ) {
+            return;
+        }
+
+        $slugs = array_map(
+            static function ( $s ) {
+                $s = (string) $s;
+                $s = trim( $s );
+                return $s;
+            },
+            $slugs
+        );
+
+        $slugs = array_filter( $slugs );
+
+        update_user_meta( $user_id, 'hm_mc_hidden_menu_slugs', array_values( array_unique( $slugs ) ) );
+    }
 }
