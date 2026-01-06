@@ -16,18 +16,24 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+/**
+ * Plugin constants
+ */
+define( 'HM_MC_VERSION', '0.1.0' );
+define( 'HM_MC_FILE', __FILE__ );
+define( 'HM_MC_PATH', plugin_dir_path( __FILE__ ) );
+define( 'HM_MC_URL', plugin_dir_url( __FILE__ ) );
+
+require_once HM_MC_PATH . 'includes/class-hm-loader.php';
+
 final class HM_Menu_Controller {
 
-    const VERSION = '0.1.0';
-
-    /** @var HM_Menu_Controller|null */
     private static $instance = null;
 
     public static function instance() : HM_Menu_Controller {
         if ( null === self::$instance ) {
             self::$instance = new self();
         }
-
         return self::$instance;
     }
 
@@ -36,19 +42,17 @@ final class HM_Menu_Controller {
     }
 
     public function init() : void {
-        // Bootstrap only. No behavior in Commit 1.
         load_plugin_textdomain(
             'hm-menu-controller',
             false,
-            dirname( plugin_basename( __FILE__ ) ) . '/languages'
+            dirname( plugin_basename( HM_MC_FILE ) ) . '/languages'
         );
+
+        HM_MC_Loader::instance()->init();
     }
 
     private function __clone() {}
-
-    public function __wakeup() {
-        // Prevent unserialize.
-    }
+    public function __wakeup() {}
 }
 
 HM_Menu_Controller::instance();
