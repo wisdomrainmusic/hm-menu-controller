@@ -8,6 +8,8 @@ final class HM_MC_Settings {
     const OPTION_RESTRICTED_USERS = 'hm_mc_restricted_users'; // array of user_ids
     const OPTION_PRESETS          = 'hm_mc_presets'; // array of presets keyed by preset_key
     const USER_META_PRESET_KEY    = 'hm_mc_preset_key'; // string preset key per user
+    const USER_META_FORCE_HIDE    = 'hm_mc_force_hide_slugs';
+    const USER_META_FORCE_SHOW    = 'hm_mc_force_show_slugs';
 
     public static function get_restricted_user_ids() : array {
         $ids = get_option( self::OPTION_RESTRICTED_USERS, array() );
@@ -115,6 +117,75 @@ final class HM_MC_Settings {
         $slugs = array_filter( $slugs );
 
         update_user_meta( $user_id, 'hm_mc_hidden_menu_slugs', array_values( array_unique( $slugs ) ) );
+    }
+
+    public static function get_user_force_hide_slugs( int $user_id ) : array {
+        if ( $user_id <= 0 ) {
+            return array();
+        }
+
+        $slugs = get_user_meta( $user_id, self::USER_META_FORCE_HIDE, true );
+        if ( ! is_array( $slugs ) ) {
+            return array();
+        }
+
+        $slugs = array_map( 'sanitize_text_field', $slugs );
+        return array_values( array_unique( array_filter( $slugs ) ) );
+    }
+
+    public static function get_user_force_show_slugs( int $user_id ) : array {
+        if ( $user_id <= 0 ) {
+            return array();
+        }
+
+        $slugs = get_user_meta( $user_id, self::USER_META_FORCE_SHOW, true );
+        if ( ! is_array( $slugs ) ) {
+            return array();
+        }
+
+        $slugs = array_map( 'sanitize_text_field', $slugs );
+        return array_values( array_unique( array_filter( $slugs ) ) );
+    }
+
+    public static function set_user_force_hide_slugs( int $user_id, array $slugs ) : void {
+        if ( $user_id <= 0 ) {
+            return;
+        }
+
+        $slugs = array_map( 'sanitize_text_field', $slugs );
+        $slugs = array_values( array_unique( array_filter( $slugs ) ) );
+
+        if ( empty( $slugs ) ) {
+            delete_user_meta( $user_id, self::USER_META_FORCE_HIDE );
+            return;
+        }
+
+        update_user_meta( $user_id, self::USER_META_FORCE_HIDE, $slugs );
+    }
+
+    public static function set_user_force_show_slugs( int $user_id, array $slugs ) : void {
+        if ( $user_id <= 0 ) {
+            return;
+        }
+
+        $slugs = array_map( 'sanitize_text_field', $slugs );
+        $slugs = array_values( array_unique( array_filter( $slugs ) ) );
+
+        if ( empty( $slugs ) ) {
+            delete_user_meta( $user_id, self::USER_META_FORCE_SHOW );
+            return;
+        }
+
+        update_user_meta( $user_id, self::USER_META_FORCE_SHOW, $slugs );
+    }
+
+    public static function clear_user_overrides( int $user_id ) : void {
+        if ( $user_id <= 0 ) {
+            return;
+        }
+
+        delete_user_meta( $user_id, self::USER_META_FORCE_HIDE );
+        delete_user_meta( $user_id, self::USER_META_FORCE_SHOW );
     }
 
     public static function get_presets() : array {
@@ -302,10 +373,21 @@ final class HM_MC_Settings {
 
         $preset_key = self::get_user_preset_key( $user_id );
         if ( '' !== $preset_key ) {
-            $preset = self::get_preset( $preset_key );
-            if ( ! empty( $preset['hidden_slugs'] ) && is_array( $preset['hidden_slugs'] ) ) {
-                return array_values( array_unique( array_filter( $preset['hidden_slugs'] ) ) );
+            $preset        = self::get_preset( $preset_key );
+            $preset_hidden = ! empty( $preset['hidden_slugs'] ) && is_array( $preset['hidden_slugs'] )
+                ? array_values( array_unique( array_filter( $preset['hidden_slugs'] ) ) )
+                : array();
+
+            $force_hide = self::get_user_force_hide_slugs( $user_id );
+            $force_show = self::get_user_force_show_slugs( $user_id );
+
+            $hidden = array_values( array_unique( array_merge( $preset_hidden, $force_hide ) ) );
+
+            if ( ! empty( $force_show ) ) {
+                $hidden = array_values( array_diff( $hidden, $force_show ) );
             }
+
+            return $hidden;
         }
 
         // Fallback: legacy per-user storage

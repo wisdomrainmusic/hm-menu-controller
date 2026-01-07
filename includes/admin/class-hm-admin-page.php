@@ -75,7 +75,10 @@ $posted_hidden = array_map( 'sanitize_text_field', $posted_hidden );
 $posted_hidden = array_values( array_unique( array_filter( $posted_hidden ) ) );
 
 // Merge strategy: update only current tab slugs, keep other tabs untouched.
-$existing_hidden = HM_MC_Settings::get_hidden_menu_slugs( (int) $target_user_id );
+$preset_key = HM_MC_Settings::get_user_preset_key( (int) $target_user_id );
+$existing_hidden = '' !== $preset_key
+? HM_MC_Settings::get_effective_hidden_menu_slugs( (int) $target_user_id )
+: HM_MC_Settings::get_hidden_menu_slugs( (int) $target_user_id );
 
 if ( ! empty( $tab_slugs ) ) {
 $existing_hidden = array_values(
@@ -90,20 +93,30 @@ return ! in_array( (string) $slug, $tab_slugs, true );
 
 $new_hidden = array_values( array_unique( array_merge( $existing_hidden, $posted_hidden ) ) );
 
+if ( '' !== $preset_key ) {
+// Preset base hidden
+$preset        = HM_MC_Settings::get_preset( $preset_key );
+$preset_hidden = ! empty( $preset['hidden_slugs'] ) && is_array( $preset['hidden_slugs'] )
+? array_values( array_unique( array_filter( $preset['hidden_slugs'] ) ) )
+: array();
+
+$desired_hidden = $new_hidden;
+
+// force_hide = desired_hidden - preset_hidden
+$force_hide = array_values( array_diff( $desired_hidden, $preset_hidden ) );
+
+// force_show = preset_hidden - desired_hidden
+$force_show = array_values( array_diff( $preset_hidden, $desired_hidden ) );
+
+HM_MC_Settings::set_user_force_hide_slugs( (int) $target_user_id, $force_hide );
+HM_MC_Settings::set_user_force_show_slugs( (int) $target_user_id, $force_show );
+
+self::redirect_with_notice( 'visibility_saved' );
+}
+
 HM_MC_Settings::save_hidden_menu_slugs( (int) $target_user_id, $new_hidden );
-
-$url = add_query_arg(
-array(
-'page'                 => self::MENU_SLUG,
-'hm_mc_notice'         => rawurlencode( 'menu_saved' ),
-'hm_mc_target_user_id' => (int) $target_user_id,
-'hm_mc_tab'            => isset( $_GET['hm_mc_tab'] ) ? sanitize_text_field( wp_unslash( $_GET['hm_mc_tab'] ) ) : '',
-),
-admin_url( 'admin.php' )
-);
-
-wp_safe_redirect( $url );
-exit;
+HM_MC_Settings::clear_user_overrides( (int) $target_user_id );
+self::redirect_with_notice( 'visibility_saved' );
 }
 
 if ( 'save_preset' === $action ) {
@@ -747,6 +760,7 @@ $map = array(
 'user_added'      => array( 'success', __( 'User added to restricted list.', 'hm-menu-controller' ) ),
 'user_removed'    => array( 'success', __( 'User removed from restricted list.', 'hm-menu-controller' ) ),
 'menu_saved'      => array( 'success', __( 'Menu visibility saved for this user.', 'hm-menu-controller' ) ),
+'visibility_saved'      => array( 'success', __( 'Menu visibility saved for this user.', 'hm-menu-controller' ) ),
 'preset_saved'   => array( 'success', __( 'Preset saved.', 'hm-menu-controller' ) ),
 'preset_captured' => array( 'success', __( 'Preset captured from user settings.', 'hm-menu-controller' ) ),
 'preset_deleted' => array( 'success', __( 'Preset deleted.', 'hm-menu-controller' ) ),
