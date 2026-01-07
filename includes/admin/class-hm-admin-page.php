@@ -186,6 +186,80 @@ admin_url( 'admin.php' )
 wp_safe_redirect( $url );
 exit;
 }
+
+if ( 'capture_preset_from_user' === $action ) {
+$target_user_id = isset( $_POST['hm_mc_target_user_id'] ) ? absint( wp_unslash( $_POST['hm_mc_target_user_id'] ) ) : 0;
+$preset_key     = isset( $_POST['hm_mc_preset_key'] ) ? sanitize_key( wp_unslash( $_POST['hm_mc_preset_key'] ) ) : '';
+$preset_name    = isset( $_POST['hm_mc_preset_name'] ) ? sanitize_text_field( wp_unslash( $_POST['hm_mc_preset_name'] ) ) : '';
+
+if ( $target_user_id <= 0 || '' === $preset_key || '' === $preset_name ) {
+self::redirect_with_notice( 'preset_invalid' );
+}
+
+// Pull the EXACT per-user settings you created by ticking checkboxes
+$hidden = HM_MC_Settings::get_hidden_menu_slugs( (int) $target_user_id );
+
+HM_MC_Settings::save_preset( $preset_key, $preset_name, $hidden );
+
+$url = add_query_arg(
+array(
+'page'                 => self::MENU_SLUG,
+'hm_mc_notice'         => rawurlencode( 'preset_captured' ),
+'hm_mc_preset'         => rawurlencode( $preset_key ),
+'hm_mc_target_user_id' => (int) $target_user_id,
+),
+admin_url( 'admin.php' )
+);
+
+wp_safe_redirect( $url );
+exit;
+}
+
+if ( 'export_presets' === $action ) {
+$payload = HM_MC_Settings::export_presets_payload();
+$json    = wp_json_encode( $payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
+
+if ( false === $json ) {
+$json = '{}';
+}
+
+nocache_headers();
+header( 'Content-Type: application/json; charset=' . get_option( 'blog_charset' ) );
+
+$filename = 'hm-menu-controller-presets-' . gmdate( 'Y-m-d-His' ) . '.json';
+header( 'Content-Disposition: attachment; filename="' . $filename . '"' );
+
+echo $json;
+exit;
+}
+
+if ( 'import_presets' === $action ) {
+$raw = isset( $_POST['hm_mc_import_presets_json'] ) ? (string) wp_unslash( $_POST['hm_mc_import_presets_json'] ) : '';
+$raw = trim( $raw );
+
+if ( '' === $raw ) {
+self::redirect_with_notice( 'import_empty' );
+}
+
+$data = json_decode( $raw, true );
+if ( ! is_array( $data ) ) {
+self::redirect_with_notice( 'import_invalid_json' );
+}
+
+$result = HM_MC_Settings::import_presets_payload( $data );
+
+$url = add_query_arg(
+array(
+'page'           => self::MENU_SLUG,
+'hm_mc_notice'   => rawurlencode( 'presets_imported' ),
+'hm_mc_imported' => (int) ( $result['imported'] ?? 0 ),
+),
+admin_url( 'admin.php' )
+);
+
+wp_safe_redirect( $url );
+exit;
+}
 }
 
 private static function redirect_with_notice( string $notice ) : void {
@@ -304,6 +378,42 @@ $roles = ! empty( $user->roles ) ? implode( ', ', array_map( 'sanitize_text_fiel
 <?php self::render_target_user_picker( $restricted_ids, $target_user_id ); ?>
 
 <?php if ( $target_user_id > 0 ) : ?>
+<div style="margin: 14px 0 18px; padding: 12px; background: #fff; border: 1px solid #dcdcde; max-width: 980px;">
+<h3 style="margin-top:0;"><?php echo esc_html__( 'Capture preset from this user', 'hm-menu-controller' ); ?></h3>
+<p class="description" style="margin-top:0;">
+<?php echo esc_html__( 'Creates/overwrites a preset using the current saved menu visibility of the selected user (your checkbox configuration).', 'hm-menu-controller' ); ?>
+</p>
+
+<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+<?php wp_nonce_field( 'hm_mc_admin_page' ); ?>
+<input type="hidden" name="action" value="hm_mc_admin_page" />
+<input type="hidden" name="hm_mc_action" value="capture_preset_from_user" />
+<input type="hidden" name="hm_mc_target_user_id" value="<?php echo esc_attr( (string) $target_user_id ); ?>" />
+
+<table class="form-table" role="presentation" style="margin:0;">
+<tr>
+<th scope="row" style="width:180px;">
+<label for="hm_mc_capture_preset_key"><?php echo esc_html__( 'Preset key', 'hm-menu-controller' ); ?></label>
+</th>
+<td>
+<input id="hm_mc_capture_preset_key" name="hm_mc_preset_key" type="text" class="regular-text" placeholder="client" required />
+</td>
+</tr>
+<tr>
+<th scope="row">
+<label for="hm_mc_capture_preset_name"><?php echo esc_html__( 'Preset name', 'hm-menu-controller' ); ?></label>
+</th>
+<td>
+<input id="hm_mc_capture_preset_name" name="hm_mc_preset_name" type="text" class="regular-text" placeholder="Client (captured)" required />
+</td>
+</tr>
+</table>
+
+<p style="margin: 10px 0 0;">
+<button type="submit" class="button button-primary"><?php echo esc_html__( 'Capture preset', 'hm-menu-controller' ); ?></button>
+</p>
+</form>
+</div>
 <?php
 $presets        = HM_MC_Settings::get_presets();
 $current_preset = HM_MC_Settings::get_user_preset_key( (int) $target_user_id );
@@ -348,6 +458,37 @@ $current_preset = HM_MC_Settings::get_user_preset_key( (int) $target_user_id );
 <p><?php echo esc_html__( 'Create reusable menu visibility presets. In the next step you will be able to assign a preset to any restricted user.', 'hm-menu-controller' ); ?></p>
 
 <?php self::render_presets_ui(); ?>
+
+<h3><?php echo esc_html__( 'Preset Export / Import', 'hm-menu-controller' ); ?></h3>
+
+<div style="display:flex; gap:24px; flex-wrap:wrap; max-width: 980px;">
+
+<div style="flex:1; min-width: 320px;">
+<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+<?php wp_nonce_field( 'hm_mc_admin_page' ); ?>
+<input type="hidden" name="action" value="hm_mc_admin_page" />
+<input type="hidden" name="hm_mc_action" value="export_presets" />
+<p>
+<button type="submit" class="button button-secondary"><?php echo esc_html__( 'Download presets JSON', 'hm-menu-controller' ); ?></button>
+</p>
+</form>
+</div>
+
+<div style="flex:2; min-width: 420px;">
+<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+<?php wp_nonce_field( 'hm_mc_admin_page' ); ?>
+<input type="hidden" name="action" value="hm_mc_admin_page" />
+<input type="hidden" name="hm_mc_action" value="import_presets" />
+
+<textarea name="hm_mc_import_presets_json" rows="10" class="large-text code" placeholder="{...}"></textarea>
+
+<p style="margin-top:10px;">
+<button type="submit" class="button button-primary"><?php echo esc_html__( 'Import presets JSON', 'hm-menu-controller' ); ?></button>
+</p>
+</form>
+</div>
+
+</div>
 
 </div>
 <?php
@@ -598,11 +739,32 @@ $map = array(
 'user_removed'    => array( 'success', __( 'User removed from restricted list.', 'hm-menu-controller' ) ),
 'menu_saved'      => array( 'success', __( 'Menu visibility saved for this user.', 'hm-menu-controller' ) ),
 'preset_saved'   => array( 'success', __( 'Preset saved.', 'hm-menu-controller' ) ),
+'preset_captured' => array( 'success', __( 'Preset captured from user settings.', 'hm-menu-controller' ) ),
 'preset_deleted' => array( 'success', __( 'Preset deleted.', 'hm-menu-controller' ) ),
 'preset_invalid' => array( 'error', __( 'Preset key/name is invalid.', 'hm-menu-controller' ) ),
 'preset_assigned' => array( 'success', __( 'Preset assigned to user.', 'hm-menu-controller' ) ),
+'import_empty'        => array( 'error', __( 'Import JSON is empty.', 'hm-menu-controller' ) ),
+'import_invalid_json' => array( 'error', __( 'Import JSON is not valid.', 'hm-menu-controller' ) ),
 'invalid_request' => array( 'error', __( 'Invalid request.', 'hm-menu-controller' ) ),
 );
+
+if ( 'presets_imported' === $notice ) {
+$imported = isset( $_GET['hm_mc_imported'] ) ? absint( wp_unslash( $_GET['hm_mc_imported'] ) ) : 0;
+
+$type    = 'success';
+$message = sprintf(
+/* translators: %d imported presets */
+__( 'Presets imported: %d', 'hm-menu-controller' ),
+$imported
+);
+
+printf(
+'<div class="notice notice-%1$s is-dismissible"><p>%2$s</p></div>',
+esc_attr( $type ),
+esc_html( $message )
+);
+return;
+}
 
 if ( ! isset( $map[ $notice ] ) ) {
 return;

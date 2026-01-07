@@ -190,6 +190,67 @@ final class HM_MC_Settings {
         return true;
     }
 
+    public static function export_presets_payload() : array {
+        $presets = self::get_presets();
+
+        return array(
+            'plugin'      => 'hm-menu-controller',
+            'format'      => 'presets',
+            'exported_at' => gmdate( 'c' ),
+            'presets'     => $presets,
+        );
+    }
+
+    /**
+     * Import presets payload.
+     * Strategy:
+     * - Overwrite presets with same key
+     * - Add new presets
+     * Returns: ['imported' => int]
+     */
+    public static function import_presets_payload( array $payload ) : array {
+        $imported = 0;
+
+        if ( empty( $payload['presets'] ) || ! is_array( $payload['presets'] ) ) {
+            return array( 'imported' => 0 );
+        }
+
+        $current  = self::get_presets();
+        $incoming = $payload['presets'];
+
+        foreach ( $incoming as $key => $preset ) {
+            $key = sanitize_key( (string) $key );
+            if ( '' === $key || ! is_array( $preset ) ) {
+                continue;
+            }
+
+            $name = isset( $preset['name'] ) ? sanitize_text_field( (string) $preset['name'] ) : '';
+            if ( '' === $name ) {
+                $name = $key;
+            }
+
+            $hidden = isset( $preset['hidden_slugs'] ) && is_array( $preset['hidden_slugs'] ) ? $preset['hidden_slugs'] : array();
+            $hidden = array_map(
+                static function ( $s ) {
+                    return sanitize_text_field( (string) $s );
+                },
+                $hidden
+            );
+            $hidden = array_values( array_unique( array_filter( $hidden ) ) );
+
+            $current[ $key ] = array(
+                'name'         => $name,
+                'hidden_slugs' => $hidden,
+            );
+
+            $imported++;
+        }
+
+        update_option( self::OPTION_PRESETS, $current, false );
+
+        return array( 'imported' => (int) $imported );
+    }
+
     public static function delete_preset( string $preset_key ) : void {
         $preset_key = sanitize_key( $preset_key );
         if ( '' === $preset_key ) {
