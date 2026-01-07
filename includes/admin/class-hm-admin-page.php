@@ -105,6 +105,87 @@ admin_url( 'admin.php' )
 wp_safe_redirect( $url );
 exit;
 }
+
+if ( 'save_preset' === $action ) {
+$preset_key = isset( $_POST['hm_mc_preset_key'] ) ? sanitize_key( wp_unslash( $_POST['hm_mc_preset_key'] ) ) : '';
+$name       = isset( $_POST['hm_mc_preset_name'] ) ? sanitize_text_field( wp_unslash( $_POST['hm_mc_preset_name'] ) ) : '';
+$raw_slugs  = isset( $_POST['hm_mc_preset_hidden_slugs'] ) ? (string) wp_unslash( $_POST['hm_mc_preset_hidden_slugs'] ) : '';
+
+if ( '' === $preset_key || '' === $name ) {
+self::redirect_with_notice( 'preset_invalid' );
+}
+
+$lines = preg_split( "/\r\n|\n|\r/", $raw_slugs );
+if ( ! is_array( $lines ) ) {
+$lines = array();
+}
+
+$hidden_slugs = array();
+foreach ( $lines as $line ) {
+$line = trim( (string) $line );
+if ( '' === $line ) {
+continue;
+}
+$hidden_slugs[] = sanitize_text_field( $line );
+}
+
+HM_MC_Settings::save_preset( $preset_key, $name, $hidden_slugs );
+
+$url = add_query_arg(
+array(
+'page'         => self::MENU_SLUG,
+'hm_mc_notice' => rawurlencode( 'preset_saved' ),
+'hm_mc_preset' => rawurlencode( $preset_key ),
+),
+admin_url( 'admin.php' )
+);
+
+wp_safe_redirect( $url );
+exit;
+}
+
+if ( 'delete_preset' === $action ) {
+$preset_key = isset( $_POST['hm_mc_preset_key'] ) ? sanitize_key( wp_unslash( $_POST['hm_mc_preset_key'] ) ) : '';
+if ( '' === $preset_key ) {
+self::redirect_with_notice( 'preset_invalid' );
+}
+
+HM_MC_Settings::delete_preset( $preset_key );
+
+$url = add_query_arg(
+array(
+'page'         => self::MENU_SLUG,
+'hm_mc_notice' => rawurlencode( 'preset_deleted' ),
+),
+admin_url( 'admin.php' )
+);
+
+wp_safe_redirect( $url );
+exit;
+}
+
+if ( 'assign_preset' === $action ) {
+$target_user_id = isset( $_POST['hm_mc_target_user_id'] ) ? absint( wp_unslash( $_POST['hm_mc_target_user_id'] ) ) : 0;
+$preset_key     = isset( $_POST['hm_mc_preset_key'] ) ? sanitize_key( wp_unslash( $_POST['hm_mc_preset_key'] ) ) : '';
+
+if ( $target_user_id <= 0 ) {
+self::redirect_with_notice( 'invalid_request' );
+}
+
+HM_MC_Settings::set_user_preset_key( (int) $target_user_id, $preset_key );
+
+$url = add_query_arg(
+array(
+'page'                 => self::MENU_SLUG,
+'hm_mc_notice'         => rawurlencode( 'preset_assigned' ),
+'hm_mc_target_user_id' => (int) $target_user_id,
+),
+admin_url( 'admin.php' )
+);
+
+wp_safe_redirect( $url );
+exit;
+}
 }
 
 private static function redirect_with_notice( string $notice ) : void {
@@ -223,6 +304,32 @@ $roles = ! empty( $user->roles ) ? implode( ', ', array_map( 'sanitize_text_fiel
 <?php self::render_target_user_picker( $restricted_ids, $target_user_id ); ?>
 
 <?php if ( $target_user_id > 0 ) : ?>
+<?php
+$presets        = HM_MC_Settings::get_presets();
+$current_preset = HM_MC_Settings::get_user_preset_key( (int) $target_user_id );
+?>
+<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin: 12px 0 20px;">
+<?php wp_nonce_field( 'hm_mc_admin_page' ); ?>
+<input type="hidden" name="action" value="hm_mc_admin_page" />
+<input type="hidden" name="hm_mc_action" value="assign_preset" />
+<input type="hidden" name="hm_mc_target_user_id" value="<?php echo esc_attr( (string) $target_user_id ); ?>" />
+
+<label for="hm_mc_preset_key" style="margin-right:10px;">
+<strong><?php echo esc_html__( 'Assigned preset:', 'hm-menu-controller' ); ?></strong>
+</label>
+
+<select name="hm_mc_preset_key" id="hm_mc_preset_key">
+<option value=""><?php echo esc_html__( '— No preset (use user settings) —', 'hm-menu-controller' ); ?></option>
+<?php foreach ( $presets as $key => $preset ) : ?>
+<option value="<?php echo esc_attr( (string) $key ); ?>" <?php selected( $current_preset, (string) $key ); ?>>
+<?php echo esc_html( $preset['name'] ?? $key ); ?>
+</option>
+<?php endforeach; ?>
+</select>
+
+<?php submit_button( __( 'Assign preset', 'hm-menu-controller' ), 'secondary', 'submit', false ); ?>
+</form>
+
 <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 <?php wp_nonce_field( 'hm_mc_admin_page' ); ?>
 <input type="hidden" name="action" value="hm_mc_admin_page" />
@@ -234,6 +341,13 @@ $roles = ! empty( $user->roles ) ? implode( ', ', array_map( 'sanitize_text_fiel
 <?php submit_button( __( 'Save menu visibility', 'hm-menu-controller' ) ); ?>
 </form>
 <?php endif; ?>
+
+<hr />
+
+<h2><?php echo esc_html__( 'Presets', 'hm-menu-controller' ); ?></h2>
+<p><?php echo esc_html__( 'Create reusable menu visibility presets. In the next step you will be able to assign a preset to any restricted user.', 'hm-menu-controller' ); ?></p>
+
+<?php self::render_presets_ui(); ?>
 
 </div>
 <?php
@@ -356,6 +470,122 @@ break;
 }
 }
 
+private static function render_presets_ui() : void {
+$presets = HM_MC_Settings::get_presets();
+
+$selected_key = isset( $_GET['hm_mc_preset'] ) ? sanitize_key( wp_unslash( $_GET['hm_mc_preset'] ) ) : '';
+
+$editing = array(
+'key'   => '',
+'name'  => '',
+'slugs' => '',
+);
+
+if ( '' !== $selected_key ) {
+$preset = HM_MC_Settings::get_preset( $selected_key );
+if ( ! empty( $preset ) ) {
+$editing['key']  = $selected_key;
+$editing['name'] = isset( $preset['name'] ) ? (string) $preset['name'] : '';
+$slugs           = isset( $preset['hidden_slugs'] ) && is_array( $preset['hidden_slugs'] ) ? $preset['hidden_slugs'] : array();
+$editing['slugs'] = implode( "\n", $slugs );
+}
+}
+
+echo '<div style="display:flex; gap:24px; flex-wrap:wrap; max-width: 980px;">';
+
+// Left: list
+echo '<div style="flex:1; min-width: 320px;">';
+echo '<h3>' . esc_html__( 'Existing presets', 'hm-menu-controller' ) . '</h3>';
+
+if ( empty( $presets ) ) {
+echo '<p>' . esc_html__( 'No presets yet.', 'hm-menu-controller' ) . '</p>';
+} else {
+echo '<table class="widefat striped">';
+echo '<thead><tr>';
+echo '<th>' . esc_html__( 'Name', 'hm-menu-controller' ) . '</th>';
+echo '<th style="width:180px;">' . esc_html__( 'Key', 'hm-menu-controller' ) . '</th>';
+echo '<th style="width:120px;">' . esc_html__( 'Edit', 'hm-menu-controller' ) . '</th>';
+echo '</tr></thead><tbody>';
+
+foreach ( $presets as $key => $preset ) {
+$name = isset( $preset['name'] ) ? (string) $preset['name'] : $key;
+
+$edit_url = add_query_arg(
+array(
+'page'        => self::MENU_SLUG,
+'hm_mc_preset'=> rawurlencode( (string) $key ),
+),
+admin_url( 'admin.php' )
+);
+
+echo '<tr>';
+echo '<td>' . esc_html( $name ) . '</td>';
+echo '<td><code>' . esc_html( (string) $key ) . '</code></td>';
+echo '<td><a class="button button-small" href="' . esc_url( $edit_url ) . '">' . esc_html__( 'Edit', 'hm-menu-controller' ) . '</a></td>';
+echo '</tr>';
+}
+
+echo '</tbody></table>';
+}
+
+echo '</div>';
+
+// Right: editor
+echo '<div style="flex:2; min-width: 420px;">';
+echo '<h3>' . esc_html__( 'Create / Edit preset', 'hm-menu-controller' ) . '</h3>';
+
+echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+wp_nonce_field( 'hm_mc_admin_page' );
+echo '<input type="hidden" name="action" value="hm_mc_admin_page" />';
+echo '<input type="hidden" name="hm_mc_action" value="save_preset" />';
+
+echo '<table class="form-table" role="presentation">';
+
+echo '<tr>';
+echo '<th scope="row"><label for="hm_mc_preset_key">' . esc_html__( 'Preset key', 'hm-menu-controller' ) . '</label></th>';
+echo '<td>';
+echo '<input type="text" id="hm_mc_preset_key" name="hm_mc_preset_key" class="regular-text" value="' . esc_attr( $editing['key'] ) . '" placeholder="client" required />';
+echo '<p class="description">' . esc_html__( 'Lowercase key (letters/numbers/underscores). Used for export/import and assignment.', 'hm-menu-controller' ) . '</p>';
+echo '</td>';
+echo '</tr>';
+
+echo '<tr>';
+echo '<th scope="row"><label for="hm_mc_preset_name">' . esc_html__( 'Preset name', 'hm-menu-controller' ) . '</label></th>';
+echo '<td>';
+echo '<input type="text" id="hm_mc_preset_name" name="hm_mc_preset_name" class="regular-text" value="' . esc_attr( $editing['name'] ) . '" placeholder="Client Preset" required />';
+echo '</td>';
+echo '</tr>';
+
+echo '<tr>';
+echo '<th scope="row"><label for="hm_mc_preset_hidden_slugs">' . esc_html__( 'Hidden menu slugs', 'hm-menu-controller' ) . '</label></th>';
+echo '<td>';
+echo '<textarea id="hm_mc_preset_hidden_slugs" name="hm_mc_preset_hidden_slugs" rows="10" class="large-text code" placeholder="plugins.php&#10;themes.php">' . esc_textarea( $editing['slugs'] ) . '</textarea>';
+echo '<p class="description">' . esc_html__( 'One slug per line. These items will be hidden in the admin sidebar when this preset is assigned.', 'hm-menu-controller' ) . '</p>';
+echo '</td>';
+echo '</tr>';
+
+echo '</table>';
+
+submit_button( __( 'Save preset', 'hm-menu-controller' ), 'primary' );
+
+echo '</form>';
+
+// Delete (only when editing)
+if ( '' !== $editing['key'] ) {
+echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="margin-top:10px;">';
+wp_nonce_field( 'hm_mc_admin_page' );
+echo '<input type="hidden" name="action" value="hm_mc_admin_page" />';
+echo '<input type="hidden" name="hm_mc_action" value="delete_preset" />';
+echo '<input type="hidden" name="hm_mc_preset_key" value="' . esc_attr( $editing['key'] ) . '" />';
+submit_button( __( 'Delete preset', 'hm-menu-controller' ), 'delete', 'submit', false );
+echo '</form>';
+}
+
+echo '</div>';
+
+echo '</div>';
+}
+
 private static function render_notice( string $notice ) : void {
 if ( empty( $notice ) ) {
 return;
@@ -367,6 +597,10 @@ $map = array(
 'user_added'      => array( 'success', __( 'User added to restricted list.', 'hm-menu-controller' ) ),
 'user_removed'    => array( 'success', __( 'User removed from restricted list.', 'hm-menu-controller' ) ),
 'menu_saved'      => array( 'success', __( 'Menu visibility saved for this user.', 'hm-menu-controller' ) ),
+'preset_saved'   => array( 'success', __( 'Preset saved.', 'hm-menu-controller' ) ),
+'preset_deleted' => array( 'success', __( 'Preset deleted.', 'hm-menu-controller' ) ),
+'preset_invalid' => array( 'error', __( 'Preset key/name is invalid.', 'hm-menu-controller' ) ),
+'preset_assigned' => array( 'success', __( 'Preset assigned to user.', 'hm-menu-controller' ) ),
 'invalid_request' => array( 'error', __( 'Invalid request.', 'hm-menu-controller' ) ),
 );
 

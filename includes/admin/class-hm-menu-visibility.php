@@ -17,7 +17,7 @@ final class HM_MC_Menu_Visibility {
 			return;
 		}
 
-		$hidden_slugs = HM_MC_Settings::get_hidden_menu_slugs( (int) $user_id );
+		$hidden_slugs = HM_MC_Settings::get_effective_hidden_menu_slugs( (int) $user_id );
 		if ( empty( $hidden_slugs ) ) {
 			return;
 		}
