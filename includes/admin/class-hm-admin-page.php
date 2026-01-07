@@ -291,7 +291,7 @@ $target_user_id = (int) $restricted_ids[0];
 
 $menu_tree = HM_MC_Menu_Snapshot::get_tree();
 
-$hidden_slugs = ( $target_user_id > 0 ) ? HM_MC_Settings::get_hidden_menu_slugs( (int) $target_user_id ) : array();
+$hidden_slugs = ( $target_user_id > 0 ) ? HM_MC_Settings::get_effective_hidden_menu_slugs( (int) $target_user_id ) : array();
 
 ?>
 <div class="wrap">
@@ -439,6 +439,15 @@ $current_preset = HM_MC_Settings::get_user_preset_key( (int) $target_user_id );
 
 <?php submit_button( __( 'Assign preset', 'hm-menu-controller' ), 'secondary', 'submit', false ); ?>
 </form>
+
+<?php if ( $target_user_id > 0 ) :
+$pk = HM_MC_Settings::get_user_preset_key( (int) $target_user_id );
+if ( '' !== $pk ) : ?>
+<p class="description" style="margin-top:6px;">
+<?php echo esc_html__( 'Note: A preset is assigned. The checklist below reflects the preset. Saving per-user visibility will not override the preset unless you remove the preset assignment.', 'hm-menu-controller' ); ?>
+</p>
+<?php endif;
+endif; ?>
 
 <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 <?php wp_nonce_field( 'hm_mc_admin_page' ); ?>
